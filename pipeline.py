@@ -4,30 +4,30 @@ import numpy as np
 from tqdm import tqdm
 import pickle
 from collections import Counter
+import os
 
 
 def save_obj(obj, name):
-    with open(name, 'wb') as f:
+    path = os.path.join('data', name)
+    with open(path, 'wb') as f:
         pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
 
 
 def load_obj(name):
-    with open(name, 'rb') as f:
+    path = os.path.join('data', name)
+    with open(path, 'rb') as f:
         return pickle.load(f)
 
 
 class CountGenresAuthors(luigi.Task):
-    counter_genre_path = 'counter_genre.pkl'
-    counter_author_path = 'counter_author.pkl'
+    path = 'data'
+    counter_genre_path = os.path.join(path, 'counter_genre.pkl')
+    counter_author_path = os.path.join(path, 'counter_author.pkl')
 
     task_complete = False
 
     def requires(self):
         pass
-
-    # def output(self):
-    #    return [luigi.LocalTarget(self.counter_genre_path),
-    #            luigi.LocalTarget(self.counter_author_path)]
 
     def complete(self):
         return self.task_complete
@@ -53,7 +53,8 @@ class CountGenresAuthors(luigi.Task):
 
 
 class MakeAuthorGenre(luigi.Task):
-    filename = 'author_genre.csv'
+    path = 'data'
+    filename = os.path.join(path, 'author_genre.csv')
 
     def requires(self):
         return CountGenresAuthors()
@@ -72,10 +73,10 @@ class MakeAuthorGenre(luigi.Task):
         return author_genre
 
     def run(self):
-        sample = pd.read_csv("sample_submission.csv")
-        interactions = pd.read_csv("interactions.csv")
-        items = pd.read_csv("items.csv")
-        users = pd.read_csv("users.csv")
+        sample = pd.read_csv(os.path.join(self.path, "sample_submission.csv"))
+        interactions = pd.read_csv(os.path.join(self.path, "interactions.csv"))
+        items = pd.read_csv(os.path.join(self.path, "items.csv"))
+        users = pd.read_csv(os.path.join(self.path, "users.csv"))
 
         interactions['start_date'] = pd.to_datetime(interactions['start_date'])
         users.fillna(0, inplace=True)
@@ -93,7 +94,8 @@ class MakeAuthorGenre(luigi.Task):
 
 
 class MakeAuthorMostPop(luigi.Task):
-    filename = 'author_most_pop.pkl'
+    path = 'data'
+    filename = os.path.join(path, 'author_most_pop.pkl')
 
     def requires(self):
         return MakeAuthorGenre()
@@ -119,11 +121,51 @@ class MakeAuthorMostPop(luigi.Task):
         return author_most_pop
 
     def run(self):
-        interactions = pd.read_csv("interactions.csv")
-        items = pd.read_csv("items.csv")
+        interactions = pd.read_csv(os.path.join(self.path, "interactions.csv"))
+        items = pd.read_csv(os.path.join(self.path, "items.csv"))
         int_item = (interactions.merge(items, left_on='item_id', right_on='id'))
 
         author_most_pop = self.make_author_most_pop(int_item)
+        with open(self.filename, 'w') as f:
+            pickle.dump(author_most_pop, f, pickle.HIGHEST_PROTOCOL)
+
+
+class MakeAuthorMostPopMale(MakeAuthorMostPop):
+    path = 'data'
+    filename = os.path.join(path, 'author_most_pop_male.pkl')
+
+    def requires(self):
+        return MakeAuthorMostPop()
+
+    def output(self):
+        return luigi.LocalTarget(self.filename)
+
+    def run(self):
+        interactions = pd.read_csv(os.path.join(self.path, "interactions.csv"))
+        items = pd.read_csv(os.path.join(self.path, "items.csv"))
+        int_item = (interactions.merge(items, left_on='item_id', right_on='id'))
+
+        author_most_pop = self.make_author_most_pop(int_item, gender=0)
+        with open(self.filename, 'w') as f:
+            pickle.dump(author_most_pop, f, pickle.HIGHEST_PROTOCOL)
+
+
+class MakeAuthorMostPopFemale(MakeAuthorMostPop):
+    path = 'data'
+    filename = os.path.join(path, 'author_most_pop_female.pkl')
+
+    def requires(self):
+        return MakeAuthorMostPopMale()
+
+    def output(self):
+        return luigi.LocalTarget(self.filename)
+
+    def run(self):
+        interactions = pd.read_csv(os.path.join(self.path, "interactions.csv"))
+        items = pd.read_csv(os.path.join(self.path, "items.csv"))
+        int_item = (interactions.merge(items, left_on='item_id', right_on='id'))
+
+        author_most_pop = self.make_author_most_pop(int_item, gender=1)
         with open(self.filename, 'w') as f:
             pickle.dump(author_most_pop, f, pickle.HIGHEST_PROTOCOL)
 
