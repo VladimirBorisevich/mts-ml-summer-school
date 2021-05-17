@@ -9,9 +9,10 @@ import os
 
 def make_logger(name, format):
     logger = logging.getLogger(name)
+    logger.setLevel(level=logging.INFO)
     handler = logging.StreamHandler()
-    handler.setLevel(logging.INFO)
-    handler_format = logging.Formatter(format)
+    handler.setLevel(level=logging.INFO)
+    handler_format = logging.Formatter(format, datefmt='%Y-%m-%d %H:%M:%S')
     handler.setFormatter(handler_format)
     logger.addHandler(handler)
     return logger
@@ -58,7 +59,7 @@ class Recommender:
 
     def __init__(self):
         self.author_genre, self.author_most_pop, \
-            self.author_most_pop_male, self.author_most_pop_female = self._load_data()
+        self.author_most_pop_male, self.author_most_pop_female = self._load_data()
 
     def _load_data(self):
         author_genre = pd.read_csv(os.path.join(self.path, 'author_genre.csv'), index_col=0)
@@ -83,22 +84,22 @@ class Recommender:
             counter_genre.update(i.split(','))
 
         for i in row.authors.to_list():
-            counter_author.update(str(i).split(','))
+            counter_author.update(str(i))
 
         top1_genre = counter_genre.most_common(2)[0][0]
         top2_genre = counter_genre.most_common(2)[1][0]
 
         top1_author = counter_author.most_common(1)[0][0]
         if len(counter_author) == sum(counter_author.values()):
-            top1_author = str(row.iloc[-1].authors).split(',')[0]
+            top1_author = str(row.iloc[-1].authors)
 
-        last1_author = str(row.iloc[-1].authors).split(',')[0]
+        last1_author = str(row.iloc[-1].authors)
 
         if len(counter_author) == 1:
-            last2_author = str(row.iloc[-1].authors).split(',')[0]
+            last2_author = str(row.iloc[-1].authors)
             return top1_genre, top2_genre, top1_author, last1_author, last2_author
 
-        last2_author = str(row.iloc[-2].authors).split(',')[0]
+        last2_author = str(row.iloc[-2].authors)
 
         return top1_genre, top2_genre, top1_author, last1_author, last2_author
 
@@ -147,7 +148,7 @@ class Recommender:
         if top2_genre == 'nan':
             top2_genre = str(top1_genre)
 
-        if len(gender) == 0:
+        if len(gender) == 0 or last1_author == 'nan' or last2_author == 'nan':
             most_pop = self.author_most_pop
         elif gender == 0:
             most_pop = self.author_most_pop_male
@@ -181,16 +182,15 @@ class Recommender:
 
         # authors_items = most_pop[last2_author]
         # pred = add_item_to_pred(authors_items,user_items,pred)
-
         if len(pred) != 10:
             second_popular = user_activity.groupby('authors')['authors'].count(). \
-                sort_values(ascending=False).index.to_list()[1].split(',')[0]
+                sort_values(ascending=False).index.to_list()[1]
             authors_items = most_pop[second_popular]
             pred = self.add_item_to_pred(authors_items, user_items, pred)
 
         if len(pred) != 10:
             second_popular = user_activity.groupby('authors')['authors'].count(). \
-                sort_values(ascending=False).index.to_list()[1].split(',')[0]
+                sort_values(ascending=False).index.to_list()[1]
             authors_items = most_pop[second_popular]
             pred = self.add_item_to_pred(authors_items, user_items, pred)
 
@@ -209,9 +209,9 @@ class Recommender:
         sample.loc[sample.Id == user, 'Predicted'] = answ
 
     def recommend_to_user(self, users):
-        logger.warning('separating data')
+        logger.info('separating data')
         user_list_less, user_list_more = separate_users(users, merged, 12)
-        logger.warning('data is separated')
+        logger.info('data is separated')
         logger.warning('making predictions')
         for user in tqdm(users):
             if user in user_list_less:
@@ -221,15 +221,15 @@ class Recommender:
         logger.warning('done')
 
 
-logger = make_logger('recommender', '%(name)s - %(levelname)s - %(message)s - %(asctime)s')
+logger = make_logger('recommender', '%(asctime)s %(levelname)-8s %(message)s')
 
-logger.warning('loading data')
+logger.info('loading data')
 sample, interactions, items, users = load_data()
-logger.warning('data is loaded\n')
+logger.info('data is loaded\n')
 
-logger.warning('merging data')
+logger.info('merging data')
 merged = merge_data(interactions, items, sample)
-logger.warning('data is merged')
+logger.info('data is merged')
 
 int_item = (interactions.merge(items, left_on='item_id', right_on='id'))
 int_user = interactions.merge(users, on='user_id')
@@ -245,3 +245,4 @@ all_top_15 = interactions.loc[interactions.start_date > '2019-12-01']. \
 
 model = Recommender()
 model.recommend_to_user(sample.Id.values)
+sample.to_csv('content.csv',index=False)
