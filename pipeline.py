@@ -36,8 +36,8 @@ class CountGenresAuthors(luigi.Task):
         counter_genre = Counter()
         counter_author = Counter()
         for i in tqdm(range(data.shape[0])):
-            genres = str(data.iloc[i].genres).split(',')
-            authors = str(data.iloc[i].authors).split(',')
+            genres = str(data.iloc[i].genres)
+            authors = str(data.iloc[i].authors)
             counter_genre.update(genres)
             counter_author.update(authors)
         return counter_genre, counter_author
@@ -103,30 +103,28 @@ class MakeAuthorMostPop(luigi.Task):
     def output(self):
         return luigi.LocalTarget(self.filename)
 
-    def make_author_most_pop(self, data, gender=None):
+    def make_author_most_pop(self, data, sex=None):
         author_most_pop = dict()
-        counter_author = load_obj('counter_author.pkl')
-        if gender is None:
-            for author in tqdm(list(counter_author.keys())):
-                author_most_pop[author] = data.loc[data.authors == author]. \
-                    groupby('item_id')['item_id']. \
-                    count().sort_values(ascending=False).index.to_list()
+        if sex is None:
+            df = data.groupby(['authors', 'item_id'])[['title']].count(). \
+                        sort_values(by=['authors', 'title'], ascending=False).reset_index()
+            for author in tqdm(list(set(df.authors))):
+                author_most_pop[author] = df.loc[df.authors == author].item_id.to_list()
             return author_most_pop
 
-        for author in tqdm(list(counter_author.keys())):
-            author_most_pop[author] = data.loc[(data.sex == gender) & (data.authors == author)]. \
-                groupby('item_id')['item_id']. \
-                count().sort_values(ascending=False).index.to_list()
-
+        df = data.loc[data.sex == sex].groupby(['authors', 'item_id'])[['title']].count(). \
+                        sort_values(by=['authors', 'title'], ascending=False).reset_index()
+        for author in tqdm(list(set(df.authors))):
+            author_most_pop[author] = df.loc[df.authors == author].item_id.to_list()
         return author_most_pop
 
     def run(self):
         interactions = pd.read_csv(os.path.join(self.path, "interactions.csv"))
         items = pd.read_csv(os.path.join(self.path, "items.csv"))
         int_item = (interactions.merge(items, left_on='item_id', right_on='id'))
-
+        int_item = int_item.fillna('nan')
         author_most_pop = self.make_author_most_pop(int_item)
-        with open(self.filename, 'w') as f:
+        with open(self.filename, 'wb') as f:
             pickle.dump(author_most_pop, f, pickle.HIGHEST_PROTOCOL)
 
 
@@ -142,11 +140,14 @@ class MakeAuthorMostPopMale(MakeAuthorMostPop):
 
     def run(self):
         interactions = pd.read_csv(os.path.join(self.path, "interactions.csv"))
+        users = pd.read_csv(os.path.join(self.path, 'users.csv'))
         items = pd.read_csv(os.path.join(self.path, "items.csv"))
-        int_item = (interactions.merge(items, left_on='item_id', right_on='id'))
 
-        author_most_pop = self.make_author_most_pop(int_item, gender=0)
-        with open(self.filename, 'w') as f:
+        int_user = interactions.merge(users, on='user_id')
+        int_user = int_user.merge(items, left_on='item_id', right_on='id')
+        author_most_pop = self.make_author_most_pop(int_user, sex=0)
+
+        with open(self.filename, 'wb') as f:
             pickle.dump(author_most_pop, f, pickle.HIGHEST_PROTOCOL)
 
 
@@ -162,11 +163,14 @@ class MakeAuthorMostPopFemale(MakeAuthorMostPop):
 
     def run(self):
         interactions = pd.read_csv(os.path.join(self.path, "interactions.csv"))
+        users = pd.read_csv(os.path.join(self.path, 'users.csv'))
         items = pd.read_csv(os.path.join(self.path, "items.csv"))
-        int_item = (interactions.merge(items, left_on='item_id', right_on='id'))
 
-        author_most_pop = self.make_author_most_pop(int_item, gender=1)
-        with open(self.filename, 'w') as f:
+        int_user = interactions.merge(users, on='user_id')
+        int_user = int_user.merge(items, left_on='item_id', right_on='id')
+        author_most_pop = self.make_author_most_pop(int_user, sex=1)
+
+        with open(self.filename, 'wb') as f:
             pickle.dump(author_most_pop, f, pickle.HIGHEST_PROTOCOL)
 
 
